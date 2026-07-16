@@ -1,0 +1,15 @@
+[Unit]
+Description=Recipe Manager (API + Frontend)
+After=network.target
+
+[Service]
+Type=simple
+User=simonb29
+WorkingDirectory=/home/simonb29/recipe-manager/backend
+EnvironmentFile=/home/simonb29/recipe-manager/backend/.env
+ExecStart=/usr/bin/node dist/index.js
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

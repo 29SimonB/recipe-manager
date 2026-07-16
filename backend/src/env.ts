@@ -19,4 +19,5 @@ export const env = {
     .map((origin) => origin.trim())
     .filter(Boolean),
   dbPath: process.env.DB_PATH ?? "./data/recipe-manager.db",
+  frontendDistPath: process.env.FRONTEND_DIST_PATH,
 };

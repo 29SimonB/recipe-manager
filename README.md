@@ -1,22 +1,23 @@
 # Recipe Manager
 
-Rezepte importieren (per URL), verwalten und bearbeiten. Frontend ist eine installierbare PWA (React + Vite), Backend ist eine eigene Node/Express-API mit SQLite-Datenbank und Account-Login (JWT).
+Rezepte importieren (per URL), verwalten und bearbeiten. Frontend ist eine installierbare PWA (React + Vite), Backend ist eine eigene Node/Express-API mit SQLite-Datenbank und Account-Login (JWT). Alles läuft als ein Prozess auf dem eigenen Raspberry Pi.
 
 ## Architektur
 
 ```
 frontend/   React + Vite + TypeScript PWA (Auth-UI, Rezeptliste, Editor, Import-Formular)
 backend/    Node + Express + TypeScript API (Auth, Rezept-CRUD, URL-Import/Scraper, SQLite)
+deploy/     systemd-Unit + Deploy-Skript für den Pi
 ```
 
-**Wichtig:** GitHub Pages hostet nur statische Dateien. Das Frontend kann dort liegen, aber das Backend braucht einen eigenen, erreichbaren Host – aktuell z. B. dein eigener Rechner, später der Raspberry Pi. Das Frontend spricht das Backend über die Umgebungsvariable `VITE_API_URL` an (Build-Zeit-Konfiguration), du musst also nur diese eine URL anpassen, wenn sich der Backend-Standort ändert.
+Im Produktivbetrieb (auf dem Pi) baut man das Frontend zu statischen Dateien und lässt den Express-Server im Backend sie zusätzlich zur API ausliefern (`FRONTEND_DIST_PATH` in `backend/.env`) – ein einziger Node-Prozess auf einem Port, kein CORS, kein separates Hosting nötig.
 
 ## Lokale Entwicklung
 
 **Backend:**
 ```bash
 cd backend
-cp .env.example .env   # JWT_SECRET ggf. anpassen
+cp .env.example .env   # JWT_SECRET ggf. anpassen, FRONTEND_DIST_PATH leer lassen
 npm install
 npm run dev             # läuft auf http://localhost:3001
 ```
@@ -30,25 +31,27 @@ npm run dev              # läuft auf http://localhost:5173, spricht standardmä
 
 Konto registrieren, Rezept per URL importieren (die Ziel-Seite muss schema.org/Recipe-Daten (JSON-LD) einbetten – das ist bei den meisten großen Rezeptseiten der Fall), Vorschau bearbeiten, speichern.
 
-## Deployment
+## Produktivbetrieb auf dem Raspberry Pi
 
-### Frontend auf GitHub Pages
+Aktueller Stand: Frontend + Backend laufen beide auf `mypi4` (Debian 13, ARM64) unter dem systemd-Service `recipe-manager`, erreichbar unter **http://mypi4:3001**. Zugriff von unterwegs läuft über das bereits vorhandene VPN zur Fritzbox.
 
-Der Workflow [`(.github/workflows/deploy.yml)`](.github/workflows/deploy.yml) baut `frontend/` und deployt automatisch nach jedem Push auf `main`.
+**Erneutes Deployen nach Code-Änderungen:**
+```bash
+./deploy/deploy.sh
+```
+Das Skript synct den Code per `rsync` auf den Pi, installiert Abhängigkeiten, baut Backend und Frontend neu und startet den systemd-Service (`recipe-manager`) neu.
 
-Einmalig einrichten:
-1. Im Repo unter **Settings → Pages** als Quelle **GitHub Actions** auswählen.
-2. Unter **Settings → Secrets and variables → Actions → Variables** eine Variable `VITE_API_URL` anlegen, die auf dein laufendes Backend zeigt (z. B. `https://dein-tunnel.example.com/api`). Ohne erreichbares Backend funktionieren Login/Import auf der gehosteten Seite nicht – die Seite selbst lädt aber trotzdem.
+**Nützliche Befehle auf dem Pi:**
+```bash
+sudo systemctl status recipe-manager    # Status
+sudo systemctl restart recipe-manager   # Neustart
+journalctl -u recipe-manager -f         # Live-Logs
+```
 
-### Backend
-
-Aktuell für lokalen Betrieb gedacht (`npm run build && npm run start` im `backend`-Ordner, `DB_PATH`/`JWT_SECRET`/`CORS_ORIGINS` per `.env` konfigurieren). Für einen öffentlich erreichbaren Zugriff (z. B. damit die GitHub-Pages-Version wirklich funktioniert) brauchst du entweder:
-- einen kostenlosen Cloud-Host (Render, Fly.io, …), oder
-- einen Tunnel zu deinem eigenen Rechner/Pi (z. B. Cloudflare Tunnel, Tailscale Funnel).
-
-### Später: Raspberry Pi
-
-Backend + SQLite laufen mit `better-sqlite3` nativ auf ARM (Raspberry Pi OS 64-bit). Einfach das `backend/`-Verzeichnis auf den Pi kopieren (oder per `git pull`), `npm install && npm run build && npm run start` (idealerweise mit `pm2` oder einem systemd-Service dauerhaft laufen lassen), und `VITE_API_URL` im Frontend-Deployment auf die Pi-Adresse zeigen lassen.
+**Einmalige Ersteinrichtung** (bereits erledigt, hier zur Referenz):
+1. Node.js 22 über das NodeSource-Repo installiert (`better-sqlite3` hat fertige ARM64-Binaries, kein Kompilieren nötig).
+2. Code nach `~/recipe-manager` auf den Pi kopiert, `backend/.env` mit eigenem `JWT_SECRET` und `FRONTEND_DIST_PATH=/home/simonb29/recipe-manager/frontend/dist` angelegt.
+3. `deploy/recipe-manager.service` nach `/etc/systemd/system/` kopiert, `systemctl enable --now recipe-manager`.
 
 ## Sicherheitshinweise zum URL-Import
 

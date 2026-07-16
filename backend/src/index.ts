@@ -1,5 +1,6 @@
 import cors from "cors";
 import express from "express";
+import path from "node:path";
 import "./db.js";
 import { env } from "./env.js";
 import { authRouter } from "./routes/auth.js";
@@ -23,10 +24,18 @@ app.use("/api/auth", authRouter);
 app.use("/api/recipes", recipesRouter);
 app.use("/api/import", importRouter);
 
-app.use((_req, res) => {
+app.use("/api", (_req, res) => {
   res.status(404).json({ error: "Nicht gefunden." });
 });
 
+if (env.frontendDistPath) {
+  const distPath = path.resolve(env.frontendDistPath);
+  app.use(express.static(distPath));
+  app.get(/.*/, (_req, res) => {
+    res.sendFile(path.join(distPath, "index.html"));
+  });
+}
+
 app.listen(env.port, () => {
-  console.log(`Recipe Manager API läuft auf Port ${env.port}`);
+  console.log(`Recipe Manager läuft auf Port ${env.port}`);
 });
